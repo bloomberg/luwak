@@ -53,7 +53,7 @@ public class Monitor {
     private Directory directory;
     private DirectoryReader reader = null;
     private IndexSearcher searcher = null;
-    private SetMultimap<String, String> terms = null;
+    private SetMultimap<String, String> terms = HashMultimap.create();
     private int flushThreshold = 0;
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();

@@ -42,7 +42,7 @@ public class FieldedConjunctionQueryExtractor extends Extractor<FieldedConjuncti
             BooleanQuery bq = (BooleanQuery) field.get(query);
             extractTerms(bq, terms, extractors);
         } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+            handler.exception(e);
         }
     }
 }
