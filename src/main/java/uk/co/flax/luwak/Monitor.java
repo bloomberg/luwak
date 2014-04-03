@@ -19,6 +19,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Copyright (c) 2013 Lemur Consulting Ltd.
@@ -97,6 +99,8 @@ public class Monitor {
         reader = DirectoryReader.open(directory);
         searcher = new IndexSearcher(reader);
         buildTokenSet();
+        reader.close();
+        reader = null;
     }
 
     /**
@@ -185,21 +189,24 @@ public class Monitor {
             lock.writeLock().lock();
             IndexWriterConfig iwc = this.iwc.clone();
             IndexWriter writer = new IndexWriter(directory, iwc);
-            for (MonitorQuery mq : queriesToAdd) {
-                try {
-                    writer.updateDocument(new Term(FIELDS.del_id, mq.getId()), mq.asIndexableDocument(presearcher));
-                } catch (Exception e) {
-                    throw new RuntimeException("Couldn't index query " + mq.getId() + " [" + mq.getQuery() + "]", e);
+            try {
+                for (MonitorQuery mq : queriesToAdd) {
+                    try {
+                        writer.updateDocument(new Term(FIELDS.del_id, mq.getId()), mq.asIndexableDocument(presearcher));
+                    } catch (Exception e) {
+                        throw new RuntimeException("Couldn't index query " + mq.getId() + " [" + mq.getQuery() + "]", e);
+                    }
+                    queries.put(mq.getId(), mq);
                 }
-                queries.put(mq.getId(), mq);
+                for (MonitorQuery mq : queriesToDelete) {
+                    writer.deleteDocuments(mq.getDeletionQuery());
+                    queries.remove(mq.getId());
+                }
+            } finally {
+                writer.commit();
+                writer.close();
+                openSearcher();
             }
-            for (MonitorQuery mq : queriesToDelete) {
-                writer.deleteDocuments(mq.getDeletionQuery());
-                queries.remove(mq.getId());
-            }
-            writer.commit();
-            writer.close();
-            openSearcher();
         } catch (IOException e) {
             // Shouldn't happen, because we're using a RAMDirectory...
             throw new RuntimeException(e);
