@@ -99,8 +99,6 @@ public class Monitor {
         reader = DirectoryReader.open(directory);
         searcher = new IndexSearcher(reader);
         buildTokenSet();
-        reader.close();
-        reader = null;
     }
 
     /**
@@ -187,6 +185,10 @@ public class Monitor {
             Iterable<? extends MonitorQuery> queriesToDelete) {
         try {
             lock.writeLock().lock();
+            if (reader != null) {
+                reader.close();
+                reader = null;
+            }
             IndexWriterConfig iwc = this.iwc.clone();
             IndexWriter writer = new IndexWriter(directory, iwc);
             try {
