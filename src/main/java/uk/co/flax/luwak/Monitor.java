@@ -146,7 +146,6 @@ public class Monitor {
      * @param queriesToDelete an {@link Iterable} of {@link MonitorQuery} objects to remove
      */
     public void update(Iterable<? extends MonitorQuery> queriesToAdd, Iterable<? extends MonitorQuery> queriesToDelete) {
-        flushThreshold = 0;
         if (flushThreshold > 0) {
             updateUncommited(queriesToAdd, queriesToDelete);
             if (flushThreshold < this.uncommitedAddQueries.size() + this.uncommitedDeleteQueries.size()) {
