@@ -77,11 +77,16 @@ public class TermFilteredPresearcher extends Presearcher {
     @Override
     public final Document indexQuery(Query query) {
         Document doc = new Document();
+        StringBuilder terms = new StringBuilder();
         for (QueryTerm queryTerm : extractor.extract(query)) {
-            if (queryTerm.type == QueryTerm.Type.ANY)
+            if (queryTerm.type == QueryTerm.Type.ANY) {
+                terms.append(" ").append(extractor.getAnyToken());
                 doc.add(new StringField(queryTerm.field, extractor.getAnyToken(), Field.Store.NO));
-            else
+            }
+            else {
+                terms.append(" ").append(queryTerm.term);
                 doc.add(new StringField(queryTerm.field, queryTerm.term, Field.Store.NO));
+            }
         }
         return doc;
     }

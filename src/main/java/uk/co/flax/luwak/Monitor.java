@@ -55,7 +55,7 @@ public class Monitor {
     private Directory directory;
     private DirectoryReader reader = null;
     private IndexSearcher searcher = null;
-    private SetMultimap<String, String> terms = null;
+    private SetMultimap<String, String> terms = HashMultimap.create();
     private int flushThreshold = 0;
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
@@ -67,6 +67,8 @@ public class Monitor {
     private Map<String, MonitorQuery> uncommitedDeleteQueries = new ConcurrentHashMap<>();
 
     private final Presearcher presearcher;
+    
+    private ExceptionHandler exceptionHandler;
 
     public static class FIELDS {
         public static final String id = "id";
@@ -85,14 +87,17 @@ public class Monitor {
 
     /**
      * Create a new Monitor and sets queries flush threshold
+     *
      * @param presearcher
      * @param flushThreshold
+     * @param exceptionHandler
      */
-    public Monitor(Presearcher presearcher, int flushThreshold) {
+    public Monitor(Presearcher presearcher, int flushThreshold, ExceptionHandler exceptionHandler) {
         this(presearcher);
         this.flushThreshold = flushThreshold;
+        this.exceptionHandler = exceptionHandler;
     }
-
+    
     private void openSearcher() throws IOException {
         if (reader != null)
             reader.close();
@@ -141,6 +146,7 @@ public class Monitor {
      * @param queriesToDelete an {@link Iterable} of {@link MonitorQuery} objects to remove
      */
     public void update(Iterable<? extends MonitorQuery> queriesToAdd, Iterable<? extends MonitorQuery> queriesToDelete) {
+        flushThreshold = 0;
         if (flushThreshold > 0) {
             updateUncommited(queriesToAdd, queriesToDelete);
             if (flushThreshold < this.uncommitedAddQueries.size() + this.uncommitedDeleteQueries.size()) {
@@ -196,7 +202,12 @@ public class Monitor {
                     try {
                         writer.updateDocument(new Term(FIELDS.del_id, mq.getId()), mq.asIndexableDocument(presearcher));
                     } catch (Exception e) {
-                        throw new RuntimeException("Couldn't index query " + mq.getId() + " [" + mq.getQuery() + "]", e);
+                        if (exceptionHandler == null) {
+                            throw new RuntimeException(
+                                "Couldn't index query " + mq.getId() + " [" + mq.getQuery() + "]", e);
+                        } else {
+                            exceptionHandler.exception(e);
+                        }
                     }
                     queries.put(mq.getId(), mq);
                 }
@@ -323,6 +334,7 @@ public class Monitor {
         private final List<QueryMatch> matches = new ArrayList<QueryMatch>();
         private Map<String, MonitorQuery> addQueries;
         private Map<String, MonitorQuery> deleteQueries;
+        private final List<MatchError> errors = new ArrayList<>();
 
         SortedDocValues idField;
         final BytesRef idRef = new BytesRef();
@@ -334,14 +346,14 @@ public class Monitor {
         }
 
         public MonitorQueryCollector(final InputDocument doc, Map<String, MonitorQuery> addQueries,
-                Map<String, MonitorQuery> deleteQueries) {
+                Map<String, MonitorQuery> deleteQueries) throws IOException {
             this(doc);
             this.addQueries = addQueries;
             this.deleteQueries = deleteQueries;
             checkUncommitedQueries();
         }
 
-        private void checkUncommitedQueries() {
+        private void checkUncommitedQueries() throws IOException {
             for (MonitorQuery query: addQueries.values()) {
                 QueryMatch match = doc.search(query);
                 if (match != null)
@@ -366,9 +378,14 @@ public class Monitor {
 
             final MonitorQuery mq = queries.get(idRef.utf8ToString());
 
-            QueryMatch matches = doc.search(mq);
-            if (matches != null)
-                this.matches.add(matches);
+            try {
+                QueryMatch matches = doc.search(mq);
+                if (matches != null)
+                    this.matches.add(matches);
+            }
+            catch (Exception e) {
+                this.errors.add(new MatchError(mq.getId(), e));
+            }
 
             queryCount++;
 
@@ -384,8 +401,8 @@ public class Monitor {
             return true;
         }
 
-        public DocumentMatches getMatches(long preptime, long querytime) {
-            return new DocumentMatches(this.doc.getId(), this.matches, this.queryCount, preptime, querytime);
+        DocumentMatches getMatches(long preptime, long querytime) {
+            return new DocumentMatches(this.doc.getId(), this.matches, this.errors, this.queryCount, preptime, querytime);
         }
 
     }

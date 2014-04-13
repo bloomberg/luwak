@@ -40,7 +40,11 @@ public class NonOverlappingQueryExtractor extends Extractor<NonOverlappingQuery>
             extractTerms(innerQuery, terms, extractors);
         }
         catch (Exception e) {
-            throw new RuntimeException(e);
+            if (handler != null) {
+                handler.exception(e);
+            } else {
+                throw new RuntimeException(e);
+            }
         }
     }
 }

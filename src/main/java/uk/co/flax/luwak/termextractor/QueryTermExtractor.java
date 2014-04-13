@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import uk.co.flax.luwak.ExceptionHandler;
 
 /**
  * Utility class to extract terms from a {@link Query} by walking the query tree.
@@ -32,6 +33,8 @@ public class QueryTermExtractor {
     private final String ANYTOKEN = "__ANYTOKEN__";
 
     private final List<Extractor<?>> extractors = new ArrayList<>();
+    
+    private ExceptionHandler handler;
 
     /**
      * The default list of Extractors to use

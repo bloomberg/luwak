@@ -1,4 +1,4 @@
-package uk.co.flax.luwak.termextractor;
+ package uk.co.flax.luwak.termextractor;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.Ordering;

@@ -33,10 +33,10 @@ public class MatchesAssert extends AbstractAssert<MatchesAssert, DocumentMatches
         return new MatchesAssert(matches);
     }
 
-    public QueryMatchAssert matchesQuery(String queryId) {
+    public MatchesAssert matchesQuery(String queryId) {
         for (QueryMatch match : actual.matches()) {
             if (match.getQueryId().equals(queryId))
-                return new QueryMatchAssert(match);
+                return this;
         }
         fail("Document " + actual.docId() + " did not match query " + queryId);
         return null;
