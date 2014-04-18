@@ -276,8 +276,10 @@ public class Monitor {
     public MonitorQuery getQuery(String queryId) {
         if (queries.containsKey(queryId))
             return queries.get(queryId);
-        else
+        else if (uncommitedAddQueries.containsKey(queryId))
             return uncommitedAddQueries.get(queryId);
+        else
+            return null;
     }
 
     /**
