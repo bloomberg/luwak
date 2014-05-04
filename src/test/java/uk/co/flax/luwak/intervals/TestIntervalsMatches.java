@@ -33,7 +33,7 @@ public class TestIntervalsMatches {
 
     static final String textfield = "textfield";
 
-    static final Analyzer WHITESPACE = new WhitespaceAnalyzer(Version.LUCENE_50);
+    static final Analyzer WHITESPACE = new WhitespaceAnalyzer(Version.LUCENE_48);
 
     private final Monitor monitor = new Monitor(new MatchAllPresearcher());
 

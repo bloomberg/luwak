@@ -39,7 +39,7 @@ import java.util.List;
 
 public class LuwakDemo {
 
-    public static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_50);
+    public static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_48);
 
     public static final String FIELD = "text";
 
@@ -72,7 +72,7 @@ public class LuwakDemo {
                 if (Strings.isNullOrEmpty(queryString))
                     continue;
                 logger.info("Parsing [{}]", queryString);
-                QueryParser parser = new QueryParser(Version.LUCENE_50, FIELD, ANALYZER);
+                QueryParser parser = new QueryParser(Version.LUCENE_48, FIELD, ANALYZER);
                 queries.add(new MonitorQuery(String.format("%d-%s", count++, queryString), parser.parse(queryString)));
             }
         }
