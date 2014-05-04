@@ -92,7 +92,7 @@ public class TestMonitor {
                 .matchesQuery("query1");
     }
 
-    static final Analyzer WHITESPACE = new WhitespaceAnalyzer(Version.LUCENE_50);
+    static final Analyzer WHITESPACE = new WhitespaceAnalyzer(Version.LUCENE_48);
 
     @Test
     public void canAddMonitorQuerySubclasses() {
