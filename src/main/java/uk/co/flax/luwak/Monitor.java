@@ -60,7 +60,7 @@ public class Monitor {
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private final IndexWriterConfig iwc = new IndexWriterConfig(Version.LUCENE_50, null);
+    private final IndexWriterConfig iwc = new IndexWriterConfig(Version.LUCENE_48, null);
 
     private final Map<String, MonitorQuery> queries = new HashMap<>();
     private Map<String, MonitorQuery> uncommitedAddQueries = new ConcurrentHashMap<>();

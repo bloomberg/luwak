@@ -27,11 +27,11 @@ import java.io.IOException;
  */
 public class DuplicateRemovalTokenFilter extends FilteringTokenFilter {
 
-    private final CharArraySet seenTerms = new CharArraySet(Version.LUCENE_50, 1024, true);
+    private final CharArraySet seenTerms = new CharArraySet(Version.LUCENE_48, 1024, true);
     private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
 
     public DuplicateRemovalTokenFilter(TokenStream input) {
-        super(Version.LUCENE_50, input);
+        super(Version.LUCENE_48, input);
     }
 
     @Override

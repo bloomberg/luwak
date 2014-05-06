@@ -47,7 +47,7 @@ public class WildcardNGramPresearcher extends TermFilteredPresearcher {
     @Override
     protected TokenStream filterInputDocumentTokens(String field, TokenStream ts) {
         TokenStream ngramTs = new DuplicateRemovalTokenFilter(
-                new NGramTokenFilter(Version.LUCENE_50, ts, 1, Integer.MAX_VALUE)
+                new NGramTokenFilter(Version.LUCENE_48, ts, 1, Integer.MAX_VALUE)
         );
         return super.filterInputDocumentTokens(field, ngramTs);
     }
