@@ -126,8 +126,8 @@ public class TestIntervalsMatches {
 
         assertThat(monitor.match(doc))
                 .hasQueriesRunCount(4)
-                .hasMatchCount(2)
-                .hasErrorCount(1);
+                .hasMatchCount(3)
+                .hasErrorCount(0);
 
     }
 }
