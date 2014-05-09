@@ -115,6 +115,8 @@ public class Monitor {
             directory.close();
             directory = new RAMDirectory();
             queries.clear();
+            uncommitedAddQueries.clear();
+            uncommitedDeleteQueries.clear();
         } catch (IOException e) {
             // Shouldn't happen, we're a RAM directory
             throw new RuntimeException(e);
