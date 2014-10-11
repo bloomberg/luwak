@@ -31,6 +31,7 @@ public class ScoringMatcher extends CollectingMatcher<ScoringMatch> {
         super(doc);
     }
 
+    @Override
     protected ScoringMatch doMatch(String queryId, Scorer scorer) throws IOException {
         float score = scorer.score();
         if (score > 0)

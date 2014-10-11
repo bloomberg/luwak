@@ -73,6 +73,7 @@ public class ReportingWeightor extends TreeWeightor {
             System.out.println("Term: " + term + " weight: " + weight);
         }
 
+        @Override
         public void reportSelected(QueryTree selected, Set<QueryTree> children) {
             System.out.println("Selected " + selected + "\n\tfrom " + children);
         }
