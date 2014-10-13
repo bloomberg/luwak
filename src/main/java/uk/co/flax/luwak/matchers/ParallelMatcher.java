@@ -38,6 +38,8 @@ public class ParallelMatcher<T extends QueryMatch> extends CandidateMatcher<T> {
 
     private final List<Future<CandidateMatcher<T>>> futures = new ArrayList<>();
 
+    private final List<MatcherWorker> workers = new ArrayList<>();
+
     /**
      * Create a new ParallelMatcher
      * @param doc the InputDocument to match against
@@ -49,7 +51,9 @@ public class ParallelMatcher<T extends QueryMatch> extends CandidateMatcher<T> {
                            MatcherFactory<? extends CandidateMatcher<T>> matcherFactory, int threads) {
         super(doc);
         for (int i = 0; i < threads; i++) {
-            futures.add(executor.submit(new MatcherWorker(matcherFactory)));
+            MatcherWorker mw = new MatcherWorker(matcherFactory);
+            workers.add(mw);
+            futures.add(executor.submit(mw));
         }
     }
 
@@ -61,6 +65,13 @@ public class ParallelMatcher<T extends QueryMatch> extends CandidateMatcher<T> {
             throw new IOException("Interrupted during match");
         }
         return null;
+    }
+
+    @Override
+    public void setSlowLogLimit(long t) {
+        for (MatcherWorker mw : workers) {
+            mw.setSlowLogLimit(t);
+        }
     }
 
     @Override
@@ -113,6 +124,10 @@ public class ParallelMatcher<T extends QueryMatch> extends CandidateMatcher<T> {
                 throw new RuntimeException("Interrupted during match");
             }
             return matcher;
+        }
+
+        public void setSlowLogLimit(long t) {
+            matcher.setSlowLogLimit(t);
         }
 
     }

@@ -1,6 +1,9 @@
 package uk.co.flax.luwak.analysis;
 
 
+import java.io.IOException;
+import java.io.Reader;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
@@ -8,9 +11,6 @@ import org.apache.lucene.analysis.core.WhitespaceTokenizer;
 import org.apache.lucene.analysis.miscellaneous.KeywordRepeatFilter;
 import org.junit.Test;
 import uk.co.flax.luwak.Constants;
-
-import java.io.IOException;
-import java.io.Reader;
 
 import static uk.co.flax.luwak.util.TokenStreamAssert.assertThat;
 
