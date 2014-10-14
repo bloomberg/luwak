@@ -37,12 +37,8 @@ public class IntervalsMatcher extends CandidateMatcher<IntervalsQueryMatch> {
     }
 
     @Override
-    protected void addMatch(String queryId, IntervalsQueryMatch match) {
-        IntervalsQueryMatch prev = this.matches(queryId);
-        if (prev == null)
-            super.addMatch(queryId, match);
-        else
-            super.addMatch(queryId, IntervalsQueryMatch.merge(queryId, prev, match));
+    public IntervalsQueryMatch resolve(IntervalsQueryMatch match1, IntervalsQueryMatch match2) {
+        return IntervalsQueryMatch.merge(match1.getQueryId(), match1, match2);
     }
 
     private IntervalsQueryMatch doMatch(String queryId, Query matchQuery, Query highlightQuery) throws IOException {

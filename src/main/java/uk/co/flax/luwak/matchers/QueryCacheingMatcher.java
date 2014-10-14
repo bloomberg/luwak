@@ -49,6 +49,11 @@ public class QueryCacheingMatcher<T extends QueryMatch> extends CandidateMatcher
         return m;
     }
 
+    @Override
+    public QueryCacheingMatch<T> resolve(QueryCacheingMatch<T> match1, QueryCacheingMatch<T> match2) {
+        return match1;
+    }
+
     public static class QueryCacheingMatcherFactory<T extends QueryMatch> implements MatcherFactory<QueryCacheingMatcher<T>> {
 
         private final MatcherFactory<? extends CandidateMatcher<T>> matcherFactory;
