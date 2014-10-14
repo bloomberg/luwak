@@ -45,7 +45,7 @@ public class ConcurrentMatcher<T extends QueryMatch> extends CandidateMatcher<T>
     }
 
     @Override
-    protected T doMatch(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
+    public T matchQuery(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
         CandidateMatcher<T> matcher = chooseMatcher();
         synchronized (matcher) {
             try {
@@ -58,9 +58,9 @@ public class ConcurrentMatcher<T extends QueryMatch> extends CandidateMatcher<T>
     }
 
     @Override
-    public boolean matches(String queryId) {
+    public T matches(String queryId) {
         collectMatches();
-        return matches.containsKey(queryId);
+        return matches.get(queryId);
     }
 
     @Override

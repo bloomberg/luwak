@@ -2,12 +2,7 @@ package uk.co.flax.luwak.matchers;
 
 import java.io.IOException;
 
-import org.apache.lucene.index.AtomicReaderContext;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
-import uk.co.flax.luwak.CandidateMatcher;
 import uk.co.flax.luwak.InputDocument;
 import uk.co.flax.luwak.MatcherFactory;
 
@@ -30,67 +25,22 @@ import uk.co.flax.luwak.MatcherFactory;
 /**
  * A Matcher that reports the scores of queries run against its InputDocument
  */
-public class ScoringMatcher extends CandidateMatcher<ScoringMatch> {
+public class ScoringMatcher extends CollectingMatcher<ScoringMatch> {
 
     public ScoringMatcher(InputDocument doc) {
         super(doc);
     }
 
-    @Override
-    public ScoringMatch doMatch(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
-        ScoringMatch match = null;
-        long t = System.nanoTime();
-        float score = score(matchQuery);
-        t = System.nanoTime() - t;
-        if (t > slowLogLimit)
-            slowlog.append(queryId).append(":").append(t / 1000000).append(" ");
+    protected ScoringMatch doMatch(String queryId, Scorer scorer) throws IOException {
+        float score = scorer.score();
         if (score > 0)
-            match = new ScoringMatch(queryId, score);
-        return match;
-    }
-
-    /**
-     * Run a query against this matcher's InputDocument and report the score
-     * @param query the query to run
-     * @return the score
-     */
-    protected float score(Query query) {
-        IndexSearcher searcher = doc.getSearcher();
-        try {
-            final float[] scores = new float[1]; // inits to 0.0f (no match)
-            searcher.search(query, new Collector() {
-
-                private Scorer scorer;
-
-                @Override
-                public void collect(int doc) throws IOException {
-                    scores[0] = scorer.score();
-                }
-
-                @Override
-                public void setScorer(Scorer scorer) {
-                    this.scorer = scorer;
-                }
-
-                @Override
-                public boolean acceptsDocsOutOfOrder() {
-                    return true;
-                }
-
-                @Override
-                public void setNextReader(AtomicReaderContext context) { }
-            });
-            return scores[0];
-        }
-        catch (IOException e) {
-            // Shouldn't happen, running on MemoryIndex...
-            throw new RuntimeException(e);
-        }
+            return new ScoringMatch(queryId, score);
+        return null;
     }
 
     @Override
     protected void addMatch(String queryId, ScoringMatch match) {
-        ScoringMatch prev = this.getMatch(queryId);
+        ScoringMatch prev = this.matches(queryId);
         if (prev == null || prev.getScore() < match.getScore()) {
             super.addMatch(queryId, match);
         }

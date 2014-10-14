@@ -1,6 +1,7 @@
-package uk.co.flax.luwak;
+package uk.co.flax.luwak.matchers;
 
-import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.Explanation;
+import uk.co.flax.luwak.QueryMatch;
 
 /**
  * Copyright (c) 2014 Lemur Consulting Ltd.
@@ -18,15 +19,16 @@ import org.apache.lucene.search.Collector;
  * limitations under the License.
  */
 
-/**
- * An extension of Collector that records how long a search took.
- */
-public abstract class TimedCollector extends Collector {
+public class ExplainingMatch extends QueryMatch {
 
-    /**
-     * Set the search time
-     * @param l the search time in ms
-     */
-    public abstract void setSearchTime(long l);
+    private final Explanation explanation;
 
+    public ExplainingMatch(String queryId, Explanation explanation) {
+        super(queryId);
+        this.explanation = explanation;
+    }
+
+    public Explanation getExplanation() {
+        return explanation;
+    }
 }

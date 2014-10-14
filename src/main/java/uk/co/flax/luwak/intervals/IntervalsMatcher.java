@@ -29,17 +29,23 @@ public class IntervalsMatcher extends CandidateMatcher<IntervalsQueryMatch> {
     }
 
     @Override
-    protected void addMatch(String queryId, IntervalsQueryMatch match) {
-        IntervalsQueryMatch previousMatch = this.getMatch(queryId);
-        if (previousMatch == null) {
-            super.addMatch(queryId, match);
-            return;
-        }
-        super.addMatch(queryId, IntervalsQueryMatch.merge(queryId, previousMatch, match));
+    public IntervalsQueryMatch matchQuery(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
+        IntervalsQueryMatch match = doMatch(queryId, matchQuery, highlightQuery);
+        if (match != null)
+            this.addMatch(queryId, match);
+        return match;
     }
 
     @Override
-    public IntervalsQueryMatch doMatch(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
+    protected void addMatch(String queryId, IntervalsQueryMatch match) {
+        IntervalsQueryMatch prev = this.matches(queryId);
+        if (prev == null)
+            super.addMatch(queryId, match);
+        else
+            super.addMatch(queryId, IntervalsQueryMatch.merge(queryId, prev, match));
+    }
+
+    private IntervalsQueryMatch doMatch(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
 
         QueryIntervalsMatchCollector collector = new QueryIntervalsMatchCollector(queryId);
         doc.getSearcher().search(matchQuery, collector);

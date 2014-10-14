@@ -2,6 +2,7 @@ package uk.co.flax.luwak;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.lucene.search.Query;
 
@@ -33,7 +34,7 @@ public abstract class CandidateMatcher<T extends QueryMatch> implements Iterable
     protected final InputDocument doc;
 
     private long queryBuildTime = -1;
-    private long searchTime = -1;
+    private long searchTime = System.nanoTime();
     private int queriesRun = -1;
 
     protected long slowLogLimit;
@@ -49,40 +50,22 @@ public abstract class CandidateMatcher<T extends QueryMatch> implements Iterable
     }
 
     /**
-     * Runs the supplied query against this CandidateMatcher's InputDocument, storing any
+     * Runs the supplied query against this CandidateMatcher's InputDocument, returning any
      * resulting match.
      *
      * @param queryId the query id
      * @param matchQuery the query to run
      * @param highlightQuery an optional query to use for highlighting.  May be null
      * @throws IOException
+     * @return a QueryMatch object, or null if there was no match
      */
-    public final void matchQuery(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
-        T match = doMatch(queryId, matchQuery, highlightQuery);
-        if (match != null)
-            addMatch(match.getQueryId(), match);
-    }
+    public abstract T matchQuery(String queryId, Query matchQuery, Query highlightQuery) throws IOException;
 
     /**
-     * Run the supplied query against this CandidateMatcher's InputDocument
+     * Returns the QueryMatch for the given query, or null if it did not match
      * @param queryId the query id
-     * @param matchQuery the query to run
-     * @param highlightQuery an optional query to use for highlighting.  May be null
-     * @return a QueryMatch object if the query matched, otherwise null
-     * @throws IOException
      */
-    protected abstract T doMatch(String queryId, Query matchQuery, Query highlightQuery) throws IOException;
-
-    /**
-     * Returns true if a given query matched during the matcher run
-     * @param queryId the query id
-     * @return true if the query matched during the matcher run
-     */
-    public boolean matches(String queryId) {
-        return matches.containsKey(queryId);
-    }
-
-    protected T getMatch(String queryId) {
+    public T matches(String queryId) {
         return matches.get(queryId);
     }
 
@@ -106,7 +89,7 @@ public abstract class CandidateMatcher<T extends QueryMatch> implements Iterable
      * Called by the Monitor if running a query throws an Exception
      * @param e the MatchError detailing the problem
      */
-    protected void reportError(MatchError e) {
+    public void reportError(MatchError e) {
         this.errors.add(e);
     }
 
@@ -138,19 +121,11 @@ public abstract class CandidateMatcher<T extends QueryMatch> implements Iterable
         return queryBuildTime;
     }
 
-    void setQueryBuildTime(long queryBuildTime) {
-        this.queryBuildTime = queryBuildTime;
-    }
-
     /**
      * @return how long (in ms) it took to run the selected queries
      */
     public long getSearchTime() {
         return searchTime;
-    }
-
-    void setSearchTime(long searchTime) {
-        this.searchTime = searchTime;
     }
 
     /**
@@ -160,8 +135,10 @@ public abstract class CandidateMatcher<T extends QueryMatch> implements Iterable
         return queriesRun;
     }
 
-    void setQueriesRun(int queriesRun) {
-        this.queriesRun = queriesRun;
+    public void finish(long buildTime, int queryCount) {
+        this.queryBuildTime = buildTime;
+        this.queriesRun = queryCount;
+        this.searchTime = TimeUnit.MILLISECONDS.convert(System.nanoTime() - searchTime, TimeUnit.NANOSECONDS);
     }
 
     /*

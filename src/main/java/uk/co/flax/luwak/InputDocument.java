@@ -50,6 +50,7 @@ public class InputDocument {
     }
 
     private void finish(Similarity similarity) {
+        index.freeze();
         searcher = index.createSearcher();
         searcher.setSimilarity(similarity);
     }

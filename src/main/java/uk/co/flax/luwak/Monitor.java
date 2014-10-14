@@ -17,15 +17,16 @@ import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TieredMergePolicy;
+import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
+import org.apache.lucene.search.intervals.Interval;
+import org.apache.lucene.search.intervals.IntervalCollector;
+import org.apache.lucene.search.intervals.IntervalIterator;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
+import uk.co.flax.luwak.presearcher.PresearcherMatches;
 import uk.co.flax.luwak.presearcher.TermsEnumFilter;
 
 /**
@@ -48,7 +49,6 @@ public class Monitor implements Closeable {
 
     private final MonitorQueryParser queryParser;
     private final Presearcher presearcher;
-    private final MonitorQueryCollectorFactory collectorFactory;
     private final QueryDecomposer decomposer;
 
     private final Directory directory;
@@ -80,16 +80,13 @@ public class Monitor implements Closeable {
     /**
      * Create a new Monitor instance, using a passed in Directory for its queryindex
      * @param queryParser the query parser to use
-     * @param collectorFactory collector factory to use
      * @param presearcher the presearcher to use
      * @param directory the directory where the queryindex is stored
      * @param decomposer the QueryDecomposer to use
      * @throws IOException
      */
-    public Monitor(MonitorQueryParser queryParser, MonitorQueryCollectorFactory collectorFactory,
-            Presearcher presearcher, Directory directory, QueryDecomposer decomposer) throws IOException {
+    public Monitor(MonitorQueryParser queryParser, Presearcher presearcher, Directory directory, QueryDecomposer decomposer) throws IOException {
         this.queryParser = queryParser;
-        this.collectorFactory = collectorFactory;
         this.presearcher = presearcher;
         this.directory = directory;
         this.decomposer = decomposer;
@@ -124,16 +121,16 @@ public class Monitor implements Closeable {
      * @throws IOException
      */
     public Monitor(MonitorQueryParser queryParser, Presearcher presearcher, Directory directory) throws IOException {
-        this(queryParser, new MatchingCollectorFactory(), presearcher, directory, new QueryDecomposer());
+        this(queryParser, presearcher, directory, new QueryDecomposer());
     }
 
 
     public Monitor(MonitorQueryParser queryParser, Presearcher presearcher) throws IOException {
-        this(queryParser, new MatchingCollectorFactory(), presearcher, new RAMDirectory(), new QueryDecomposer());
+        this(queryParser, presearcher, new RAMDirectory(), new QueryDecomposer());
     }
 
     public Monitor(MonitorQueryParser queryParser, Presearcher presearcher, QueryDecomposer decomposer) throws IOException {
-        this(queryParser, new MatchingCollectorFactory(), presearcher, new RAMDirectory(), decomposer);
+        this(queryParser, presearcher, new RAMDirectory(), decomposer);
     }
 
     /**
@@ -395,13 +392,13 @@ public class Monitor implements Closeable {
 
     private void match(CandidateMatcher matcher) throws IOException {
 
-        long start = System.nanoTime();
+        long buildTime = System.nanoTime();
         Query query = buildQuery(matcher.getDocument());
-        matcher.setQueryBuildTime((System.nanoTime() - start) / 1000000);
+        buildTime = (System.nanoTime() - buildTime) / 1000000;
 
-        MonitorQueryCollector collector = this.collectorFactory.get(purgeCache, matcher);
+        MatchingCollector collector = new MatchingCollector(matcher);
         match(query, collector);
-        matcher.setQueriesRun(collector.getQueryCount());
+        matcher.finish(buildTime, collector.getQueryCount());
 
     }
 
@@ -463,9 +460,15 @@ public class Monitor implements Closeable {
         return writer.numDocs();
     }
 
+    public <T extends QueryMatch> PresearcherMatches<T> debug(InputDocument doc,
+                                                              MatcherFactory<? extends CandidateMatcher<T>> factory) throws IOException {
+        PresearcherMatchCollector collector = new PresearcherMatchCollector(factory.createMatcher(doc));
+        match(doc, collector);
+        return collector.getMatches();
+    }
+
     private void match(Query query, MonitorQueryCollector collector) throws IOException {
         IndexSearcher searcher = null;
-        long startTime = System.nanoTime();
         try {
             searcher = manager.acquire();
             collector.setQueryMap(this.queries);
@@ -474,8 +477,6 @@ public class Monitor implements Closeable {
         }
         finally {
             manager.release(searcher);
-            long searchTime = TimeUnit.MILLISECONDS.convert((System.nanoTime() - startTime), TimeUnit.NANOSECONDS);
-            collector.setSearchTime(searchTime);
         }
     }
 
@@ -508,10 +509,6 @@ public class Monitor implements Closeable {
             }
         }
 
-        @Override
-        public void setSearchTime(long searchTime) {
-            matcher.setSearchTime(searchTime);
-        }
     }
 
     public static abstract class SearchingCollector extends MonitorQueryCollector {
@@ -531,15 +528,127 @@ public class Monitor implements Closeable {
             doSearch(id.utf8ToString(), hash);
         }
 
-        @Override
-        protected void finish() {
-        }
     }
 
-    private static class MatchingCollectorFactory implements MonitorQueryCollectorFactory {
-        @Override
-        public MonitorQueryCollector get(Map<BytesRef, CacheEntry> queryCache, CandidateMatcher matcher) {
-          return new MatchingCollector(matcher);
+    /**
+     * A Collector that decodes the stored query for each document hit.
+     */
+    public static abstract class MonitorQueryCollector extends Collector {
+
+        protected BinaryDocValues hashDV;
+        protected BinaryDocValues idDV;
+        protected AtomicReader reader;
+
+        final BytesRef hash = new BytesRef();
+        final BytesRef id = new BytesRef();
+
+        protected Map<BytesRef, CacheEntry> queries;
+
+        void setQueryMap(Map<BytesRef, CacheEntry> queries) {
+            this.queries = queries;
         }
+
+        protected int queryCount = 0;
+
+        @Override
+        public void setScorer(Scorer scorer) throws IOException {
+
+        }
+
+        @Override
+        public final void setNextReader(AtomicReaderContext context) throws IOException {
+            this.reader = context.reader();
+            this.hashDV = context.reader().getBinaryDocValues(Monitor.FIELDS.hash);
+            this.idDV = context.reader().getBinaryDocValues(FIELDS.id);
+        }
+
+        @Override
+        public boolean acceptsDocsOutOfOrder() {
+            return true;
+        }
+
+        public int getQueryCount() {
+            return queryCount;
+        }
+
+        public void finish() {}
+
+    }
+
+    public static class PresearcherMatchCollector<T extends QueryMatch>
+            extends MonitorQueryCollector implements IntervalCollector {
+
+        private IntervalIterator positions;
+        private Document document;
+        private String currentId;
+
+        public final Map<String, StringBuilder> matchingTerms = new HashMap<>();
+
+        private final BytesRef scratch = new BytesRef();
+
+        final CandidateMatcher<T> matcher;
+
+        private PresearcherMatchCollector(CandidateMatcher<T> matcher) {
+            this.matcher = matcher;
+        }
+
+        public PresearcherMatches<T> getMatches() {
+            return new PresearcherMatches<>(matchingTerms, matcher);
+        }
+
+        @Override
+        public void collect(int doc) throws IOException {
+
+            idDV.get(doc, scratch);
+            this.currentId = scratch.utf8ToString();
+
+            document = reader.document(doc);
+            positions.scorerAdvanced(doc);
+            while(positions.next() != null) {
+                positions.collect(this);
+            }
+
+            hashDV.get(doc, hash);
+            queryCount++;
+            try {
+                CacheEntry entry = queries.get(hash);
+                matcher.matchQuery(currentId, entry.matchQuery, entry.highlightQuery);
+            }
+            catch (Exception e) {
+                matcher.reportError(new MatchError(currentId, e));
+            }
+        }
+
+        @Override
+        public void setScorer(Scorer scorer) throws IOException {
+            positions = scorer.intervals(true);
+        }
+
+        @Override
+        public Weight.PostingFeatures postingFeatures() {
+            return Weight.PostingFeatures.OFFSETS;
+        }
+
+        public boolean acceptsDocsOutOfOrder() {
+            return false;
+        }
+
+        @Override
+        public void collectLeafPosition(Scorer scorer, Interval interval, int docID) {
+            String terms = document.getField(interval.field).stringValue();
+            if (!matchingTerms.containsKey(currentId))
+                matchingTerms.put(currentId, new StringBuilder());
+            matchingTerms.get(currentId)
+                    .append(" ")
+                    .append(interval.field)
+                    .append(":")
+                    .append(terms.substring(interval.offsetBegin, interval.offsetEnd));
+        }
+
+        @Override
+        public void collectComposite(Scorer scorer, Interval interval, int docID) {
+
+        }
+
     }
 }
