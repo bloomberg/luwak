@@ -708,4 +708,25 @@ public class Monitor implements Closeable {
 
     }
 
+    /**
+     * @return the MonitorQueryParser used by this Monitor
+     */
+    public MonitorQueryParser getQueryParser() {
+        return queryParser;
+    }
+
+    /**
+     * @return the Presearcher used by this Monitor
+     */
+    public Presearcher getPresearcher() {
+        return presearcher;
+    }
+
+    /**
+     * @return the QueryDecomposer used by this Monitor
+     */
+    public QueryDecomposer getQueryDecomposer() {
+        return decomposer;
+    }
+
 }
