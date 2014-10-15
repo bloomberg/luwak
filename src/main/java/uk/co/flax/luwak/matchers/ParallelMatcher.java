@@ -84,9 +84,7 @@ public class ParallelMatcher<T extends QueryMatch> extends CandidateMatcher<T> {
 
     @Override
     public void finish(long buildTime, int queryCount) {
-        super.finish(buildTime, queryCount);
         try {
-
             //noinspection ForLoopReplaceableByForEach
             for (int i = 0; i < futures.size(); i++) {
                 queue.put(END);
@@ -106,6 +104,7 @@ public class ParallelMatcher<T extends QueryMatch> extends CandidateMatcher<T> {
         } catch (InterruptedException | ExecutionException e) {
             throw new RuntimeException("Interrupted during match");
         }
+        super.finish(buildTime, queryCount);
     }
 
     private class MatcherWorker implements Callable<CandidateMatcher<T>> {
