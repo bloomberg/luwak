@@ -1,6 +1,7 @@
 package uk.co.flax.luwak.analysis;
 
 import java.io.IOException;
+import java.io.Reader;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
@@ -32,8 +33,8 @@ public class TestOrderedTokenFilter {
 
     Analyzer analyzer = new Analyzer() {
         @Override
-        protected TokenStreamComponents createComponents(String fieldName) {
-            Tokenizer source = new WhitespaceTokenizer(Constants.VERSION);
+        protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
+            Tokenizer source = new WhitespaceTokenizer(Constants.VERSION, reader);
             TokenStream sink = new SuffixingNGramTokenFilter(new KeywordRepeatFilter(source), "XX", "ANY", 10);
             sink = new OrderedTokenFilter(new DuplicateRemovalTokenFilter(sink));
             return new TokenStreamComponents(source, sink);
