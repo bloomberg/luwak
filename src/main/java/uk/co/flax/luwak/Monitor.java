@@ -57,6 +57,9 @@ public class Monitor implements Closeable {
 
     private long slowLogLimit = 2000000;
 
+    private long commitTimeout;
+    private long lastCommitTime;
+
     /* Used to cache updates while a purge is ongoing */
     private volatile Map<BytesRef, CacheEntry> purgeCache = null;
 
@@ -179,6 +182,10 @@ public class Monitor implements Closeable {
     private void commit(List<CacheEntry> updates) throws IOException {
         purgeLock.readLock().lock();
         try {
+            if (commitTimeout > 0 && lastCommitTime + commitTimeout < System.currentTimeMillis()) {
+                return;
+            }
+
             if (updates != null) {
                 for (CacheEntry update : updates) {
                     this.queries.put(update.hash, update);
@@ -186,6 +193,7 @@ public class Monitor implements Closeable {
                         purgeCache.put(update.hash, update);
                 }
             }
+            lastCommitTime = System.currentTimeMillis();
             writer.commit();
             manager.maybeRefresh();
         }
@@ -478,6 +486,10 @@ public class Monitor implements Closeable {
         finally {
             manager.release(searcher);
         }
+    }
+
+    public void setCommitTimeout(long milis) {
+        this.commitTimeout = milis;
     }
 
     protected Document buildIndexableQuery(String id, CacheEntry query) {
