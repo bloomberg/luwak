@@ -465,7 +465,7 @@ public class Monitor implements Closeable {
      * @return the number of queries stored in this Monitor
      */
     public int getQueryCount() {
-        return writer.numDocs();
+        return writer.maxDoc();
     }
 
     public <T extends QueryMatch> PresearcherMatches<T> debug(InputDocument doc,
