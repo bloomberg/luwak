@@ -182,16 +182,15 @@ public class Monitor implements Closeable {
     private void commit(List<CacheEntry> updates) throws IOException {
         purgeLock.readLock().lock();
         try {
-            if (commitTimeout > 0 && lastCommitTime + commitTimeout > System.currentTimeMillis()) {
-                return;
-            }
-
             if (updates != null) {
                 for (CacheEntry update : updates) {
                     this.queries.put(update.hash, update);
                     if (purgeCache != null)
                         purgeCache.put(update.hash, update);
                 }
+            }
+            if (commitTimeout > 0 && lastCommitTime + commitTimeout > System.currentTimeMillis()) {
+                return;
             }
             lastCommitTime = System.currentTimeMillis();
             writer.commit();
