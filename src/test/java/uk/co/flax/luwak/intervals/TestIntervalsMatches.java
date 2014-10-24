@@ -3,8 +3,19 @@ package uk.co.flax.luwak.intervals;
 import java.io.IOException;
 
 import com.google.common.collect.Iterables;
+import java.util.Map;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
+import org.apache.lucene.index.AtomicReaderContext;
+import org.apache.lucene.queries.function.FunctionQuery;
+import org.apache.lucene.queries.function.FunctionValues;
+import org.apache.lucene.queries.function.ValueSource;
+import org.apache.lucene.queries.function.docvalues.BoolDocValues;
+import org.apache.lucene.queries.function.valuesource.ConstValueSource;
+import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.queryparser.flexible.standard.StandardQueryParser;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.util.Version;
 import org.fest.assertions.api.Assertions;
 import org.junit.Before;
 import org.junit.Test;
@@ -12,6 +23,7 @@ import uk.co.flax.luwak.Constants;
 import uk.co.flax.luwak.InputDocument;
 import uk.co.flax.luwak.Monitor;
 import uk.co.flax.luwak.MonitorQuery;
+import uk.co.flax.luwak.MonitorQueryParser;
 import uk.co.flax.luwak.presearcher.MatchAllPresearcher;
 import uk.co.flax.luwak.queryparsers.LuceneQueryParser;
 
@@ -129,9 +141,17 @@ public class TestIntervalsMatches {
 
     @Test
     public void testQueryErrors() throws IOException {
-
+        monitor = new Monitor(new MonitorQueryParser() {
+            @Override
+            public Query parse(String queryString, Map<String, String> metadata) throws Exception {
+                if ("fake".equals(queryString)) {
+                    return new FunctionQuery(new ConstValueSource(1.0f));
+                }
+                return new StandardQueryParser(WHITESPACE).parse(queryString, textfield);
+            }
+        }, new MatchAllPresearcher());
         monitor.update(new MonitorQuery("1", "test"),
-                       new MonitorQuery("2", "*:*"),
+                       new MonitorQuery("2", "fake"),
                        new MonitorQuery("3", "document"),
                        new MonitorQuery("4", "foo"));
 
