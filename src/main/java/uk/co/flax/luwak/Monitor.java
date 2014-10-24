@@ -12,6 +12,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import java.io.FileNotFoundException;
+import java.io.PrintStream;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
@@ -26,6 +28,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.PrintStreamInfoStream;
 import uk.co.flax.luwak.presearcher.PresearcherMatches;
 import uk.co.flax.luwak.presearcher.TermsEnumFilter;
 
@@ -46,6 +49,8 @@ import uk.co.flax.luwak.presearcher.TermsEnumFilter;
  */
 
 public class Monitor implements Closeable {
+
+    private final String INFOSTREAM_FILE_PROPERTY = "infostreamFile";
 
     private final MonitorQueryParser queryParser;
     private final Presearcher presearcher;
@@ -265,6 +270,15 @@ public class Monitor implements Closeable {
         TieredMergePolicy mergePolicy = new TieredMergePolicy();
         mergePolicy.setSegmentsPerTier(4);
         iwc.setMergePolicy(mergePolicy);
+        if (System.getProperty(INFOSTREAM_FILE_PROPERTY) != null
+                && !System.getProperty(INFOSTREAM_FILE_PROPERTY).isEmpty()) {
+            try {
+                PrintStream printStream = new PrintStream(System.getProperty(INFOSTREAM_FILE_PROPERTY));
+                iwc.setInfoStream(new PrintStreamInfoStream(printStream));
+            } catch (FileNotFoundException ex) {
+                throw new RuntimeException("Cannot create infostream file", ex);
+            }
+        }
         return iwc;
     }
 
