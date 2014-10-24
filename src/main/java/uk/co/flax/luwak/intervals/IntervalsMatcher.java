@@ -22,6 +22,16 @@ import uk.co.flax.luwak.MatcherFactory;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/**
+ * CandidateMatcher class that will return exact hit positions for all matching queries
+ *
+ * If a stored query does not support interval iterators, an IntervalsQueryMatch object
+ * with no Hit positions will be returned.
+ *
+ * If a query is matched, it will be run a second time against the highlight query (if
+ * not null) to get positions.
+ */
 public class IntervalsMatcher extends CandidateMatcher<IntervalsQueryMatch> {
 
     public IntervalsMatcher(InputDocument doc) {
@@ -47,7 +57,7 @@ public class IntervalsMatcher extends CandidateMatcher<IntervalsQueryMatch> {
         doc.getSearcher().search(matchQuery, collector);
         IntervalsQueryMatch hits = collector.getMatches();
 
-        if (hits.getHitCount() == 0)
+        if (hits == null)
             return null;
 
         if (highlightQuery == null) {
@@ -58,13 +68,13 @@ public class IntervalsMatcher extends CandidateMatcher<IntervalsQueryMatch> {
         doc.getSearcher().search(highlightQuery, collector2);
         IntervalsQueryMatch hlhits = collector2.getMatches();
 
-        if (hlhits.getHitCount() != 0)
+        if (hlhits != null)
             return hlhits;
         else
             return hits;
     }
 
-    public static final MatcherFactory<IntervalsMatcher> FACTORY = new MatcherFactory<IntervalsMatcher>() {
+    public static final MatcherFactory<IntervalsQueryMatch> FACTORY = new MatcherFactory<IntervalsQueryMatch>() {
         @Override
         public IntervalsMatcher createMatcher(InputDocument doc) {
             return new IntervalsMatcher(doc);

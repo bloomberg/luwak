@@ -14,7 +14,7 @@ import uk.co.flax.luwak.matchers.ParallelMatcher;
 import uk.co.flax.luwak.matchers.SimpleMatcher;
 import uk.co.flax.luwak.presearcher.MatchAllPresearcher;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Copyright (c) 2014 Lemur Consulting Ltd.
@@ -69,7 +69,7 @@ public class TestSlowLog {
 
         InputDocument doc1 = InputDocument.builder("doc1").build();
 
-        SimpleMatcher matches = monitor.match(doc1, SimpleMatcher.FACTORY);
+        Matches<QueryMatch> matches = monitor.match(doc1, SimpleMatcher.FACTORY);
         System.out.println(matches.getSlowLog());
         assertThat(matches.getSlowLog())
                 .contains("1:")
@@ -101,7 +101,7 @@ public class TestSlowLog {
         ParallelMatcher.ParallelMatcherFactory<QueryMatch> factory
                 = ParallelMatcher.factory(executor, SimpleMatcher.FACTORY);
 
-        ParallelMatcher<QueryMatch> matches = monitor.match(doc1, factory);
+        Matches<QueryMatch> matches = monitor.match(doc1, factory);
         System.out.println(matches.getSlowLog());
         assertThat(matches.getSlowLog())
                 .contains("1:")

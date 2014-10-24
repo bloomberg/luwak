@@ -13,7 +13,7 @@ import uk.co.flax.luwak.*;
 import uk.co.flax.luwak.presearcher.MatchAllPresearcher;
 import uk.co.flax.luwak.queryparsers.LuceneQueryParser;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Copyright (c) 2014 Lemur Consulting Ltd.
@@ -47,7 +47,7 @@ public class TestParallelMatcher {
 
         InputDocument doc = InputDocument.builder("1").addField("field", "test", new KeywordAnalyzer()).build();
 
-        CandidateMatcher<QueryMatch> matches
+        Matches<QueryMatch> matches
                 = monitor.match(doc, ParallelMatcher.factory(executor, SimpleMatcher.FACTORY, 10));
 
         assertThat(matches.getMatchCount()).isEqualTo(1000);
@@ -71,7 +71,7 @@ public class TestParallelMatcher {
                 .addField("field", "test doc doc", new WhitespaceAnalyzer(Constants.VERSION))
                 .build();
 
-        CandidateMatcher<ScoringMatch> matches
+        Matches<ScoringMatch> matches
                 = monitor.match(doc, ParallelMatcher.factory(executor, ScoringMatcher.FACTORY, 10));
 
         assertThat(matches.getMatchCount()).isEqualTo(10);

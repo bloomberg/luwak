@@ -11,7 +11,7 @@ import uk.co.flax.luwak.*;
 import uk.co.flax.luwak.presearcher.MatchAllPresearcher;
 import uk.co.flax.luwak.queryparsers.LuceneQueryParser;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Copyright (c) 2014 Lemur Consulting Ltd.
@@ -41,12 +41,12 @@ public class TestQueryCacheingMatcher {
 
         InputDocument doc1 = InputDocument.builder("doc1").addField("field", "test", ANALYZER).build();
 
-        QueryCacheingMatcher<QueryMatch> match = monitor.match(doc1, QueryCacheingMatcher.factory(SimpleMatcher.FACTORY));
+        Matches<QueryCacheingMatch<QueryMatch>> match = monitor.match(doc1, QueryCacheingMatcher.factory(SimpleMatcher.FACTORY));
         assertThat(match.matches("1")).isNotNull();
         assertThat(match.matches("2")).isNull();
         assertThat(match.matches("1").query).isEqualTo(new TermQuery(new Term("field", "test")));
 
-        QueryCacheingMatcher<ExplainingMatch> match2 = monitor.match(doc1, QueryCacheingMatcher.factory(ExplainingMatcher.FACTORY));
+        Matches<QueryCacheingMatch<ExplainingMatch>> match2 = monitor.match(doc1, QueryCacheingMatcher.factory(ExplainingMatcher.FACTORY));
         assertThat(match2.matches("1")).isNotNull();
         assertThat(match2.matches("2")).isNull();
         assertThat(match2.matches("1").query).isEqualTo(new TermQuery(new Term("field", "test")));

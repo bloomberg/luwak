@@ -1,9 +1,6 @@
 package uk.co.flax.luwak.matchers;
 
-import java.io.IOException;
-
 import org.apache.lucene.search.Query;
-import uk.co.flax.luwak.CandidateMatcher;
 import uk.co.flax.luwak.InputDocument;
 import uk.co.flax.luwak.MatcherFactory;
 import uk.co.flax.luwak.QueryMatch;
@@ -30,23 +27,15 @@ import uk.co.flax.luwak.QueryMatch;
  *
  * @param <T> the QueryMatch type of the delegate
  */
-public class QueryCacheingMatcher<T extends QueryMatch> extends CandidateMatcher<QueryCacheingMatch<T>> {
+public class QueryCacheingMatcher<T extends QueryMatch> extends DelegatingMatcher<T, QueryCacheingMatch<T>> {
 
-    private final CandidateMatcher<T> matcher;
-
-    public QueryCacheingMatcher(InputDocument doc, MatcherFactory<? extends CandidateMatcher<T>> factory) {
-        super(doc);
-        this.matcher = factory.createMatcher(doc);
+    public QueryCacheingMatcher(InputDocument doc, MatcherFactory<T> factory) {
+        super(doc, factory);
     }
 
     @Override
-    public QueryCacheingMatch<T> matchQuery(String queryId, Query matchQuery, Query highlightQuery) throws IOException {
-        T match = this.matcher.matchQuery(queryId, matchQuery, highlightQuery);
-        if (match == null)
-            return null;
-        QueryCacheingMatch<T> m = new QueryCacheingMatch<>(queryId, matchQuery, match);
-        this.addMatch(queryId, m);
-        return m;
+    protected QueryCacheingMatch<T> wrapMatch(T match, String queryId, Query matchQuery, Query highlightQuery) {
+        return new QueryCacheingMatch<>(matchQuery, match);
     }
 
     @Override
@@ -54,21 +43,21 @@ public class QueryCacheingMatcher<T extends QueryMatch> extends CandidateMatcher
         return match1;
     }
 
-    public static class QueryCacheingMatcherFactory<T extends QueryMatch> implements MatcherFactory<QueryCacheingMatcher<T>> {
+    public static class QueryCacheingMatcherFactory<T extends QueryMatch> implements MatcherFactory<QueryCacheingMatch<T>> {
 
-        private final MatcherFactory<? extends CandidateMatcher<T>> matcherFactory;
+        private final MatcherFactory<T> matcherFactory;
 
-        public QueryCacheingMatcherFactory(MatcherFactory<? extends CandidateMatcher<T>> matcherFactory) {
+        public QueryCacheingMatcherFactory(MatcherFactory<T> matcherFactory) {
             this.matcherFactory = matcherFactory;
         }
 
         @Override
         public QueryCacheingMatcher<T> createMatcher(InputDocument doc) {
-            return new QueryCacheingMatcher<>(doc, matcherFactory);
+            return new QueryCacheingMatcher<T>(doc, matcherFactory);
         }
     }
 
-    public static <T extends QueryMatch> QueryCacheingMatcherFactory<T> factory(MatcherFactory<? extends CandidateMatcher<T>> matcherFactory) {
+    public static <T extends QueryMatch> QueryCacheingMatcherFactory<T> factory(MatcherFactory<T> matcherFactory) {
         return new QueryCacheingMatcherFactory<>(matcherFactory);
     }
 }
