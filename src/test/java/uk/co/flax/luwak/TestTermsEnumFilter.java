@@ -10,7 +10,7 @@ import uk.co.flax.luwak.matchers.SimpleMatcher;
 import uk.co.flax.luwak.presearcher.TermFilteredPresearcher;
 import uk.co.flax.luwak.queryparsers.LuceneQueryParser;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Copyright (c) 2014 Lemur Consulting Ltd.
@@ -44,7 +44,7 @@ public class TestTermsEnumFilter {
 
         BooleanQuery query = (BooleanQuery) monitor.buildQuery(doc);
 
-        assertThat(query.clauses()).hasSize(1);
+        assertThat(query.clauses()).hasSize(2);     // text:world __anytokenfield:__ANYTOKEN__
         assertThat(monitor.match(doc, SimpleMatcher.FACTORY).getMatchCount()).isEqualTo(1);
 
     }

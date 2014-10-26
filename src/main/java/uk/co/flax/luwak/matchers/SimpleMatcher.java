@@ -29,11 +29,16 @@ public class SimpleMatcher extends CollectingMatcher<QueryMatch> {
     }
 
     @Override
+    public QueryMatch resolve(QueryMatch match1, QueryMatch match2) {
+        return match1;
+    }
+
+    @Override
     protected QueryMatch doMatch(String queryId, Scorer scorer) throws IOException {
         return new QueryMatch(queryId);
     }
 
-    public static final MatcherFactory<SimpleMatcher> FACTORY = new MatcherFactory<SimpleMatcher>() {
+    public static final MatcherFactory<QueryMatch> FACTORY = new MatcherFactory<QueryMatch>() {
         @Override
         public SimpleMatcher createMatcher(InputDocument doc) {
             return new SimpleMatcher(doc);

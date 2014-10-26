@@ -7,10 +7,11 @@ import java.util.Set;
 
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Query;
-import uk.co.flax.luwak.termextractor.QueryTreeBuilder;
-import uk.co.flax.luwak.termextractor.QueryTerm;
-import uk.co.flax.luwak.termextractor.querytree.ConjunctionNode;
 import uk.co.flax.luwak.termextractor.QueryAnalyzer;
+import uk.co.flax.luwak.termextractor.QueryTerm;
+import uk.co.flax.luwak.termextractor.QueryTreeBuilder;
+import uk.co.flax.luwak.termextractor.querytree.AnyNode;
+import uk.co.flax.luwak.termextractor.querytree.ConjunctionNode;
 import uk.co.flax.luwak.termextractor.querytree.QueryTree;
 import uk.co.flax.luwak.termextractor.querytree.TermNode;
 
@@ -33,6 +34,9 @@ import uk.co.flax.luwak.termextractor.querytree.TermNode;
 /**
  * Builds a {@link ConjunctionNode} from a generic Query using terms extracted by
  * {@link Query#extractTerms(java.util.Set)}
+ *
+ * If the query does not support extractTerms, then we return an
+ * {@link uk.co.flax.luwak.termextractor.querytree.AnyNode}
  */
 public class GenericQueryTreeBuilder extends QueryTreeBuilder<Query> {
 
@@ -47,10 +51,13 @@ public class GenericQueryTreeBuilder extends QueryTreeBuilder<Query> {
             query.extractTerms(termSet);
         }
         catch (UnsupportedOperationException e) {
-            throw new UnsupportedOperationException("Couldn't extract terms from query of type " + query.getClass());
+            return new AnyNode("Can't extract terms from " + query.toString());
         }
 
         List<QueryTree> children = new ArrayList<>();
+        if (termSet.size() == 0)
+            return new AnyNode("Can't extract terms from " + query.toString());
+
         for (Term term : termSet) {
             children.add(new TermNode(new QueryTerm(term)));
         }

@@ -13,12 +13,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import java.io.FileNotFoundException;
+import java.io.UnsupportedEncodingException;
 import java.io.PrintStream;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
-import org.apache.lucene.document.BinaryDocValuesField;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.*;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.intervals.Interval;
@@ -62,6 +60,8 @@ public class Monitor implements Closeable {
 
     private long slowLogLimit = 2000000;
 
+    private long commitBatchSize = 5000;
+
     private long commitTimeout;
     private long lastCommitTime;
 
@@ -79,6 +79,7 @@ public class Monitor implements Closeable {
         public static final String id = "_id";
         public static final String del = "_del";
         public static final String hash = "_hash";
+        public static final String mq = "_mq";
     }
 
     private final ScheduledExecutorService purgeExecutor;
@@ -93,7 +94,9 @@ public class Monitor implements Closeable {
      * @param decomposer the QueryDecomposer to use
      * @throws IOException
      */
-    public Monitor(MonitorQueryParser queryParser, Presearcher presearcher, Directory directory, QueryDecomposer decomposer) throws IOException {
+    public Monitor(MonitorQueryParser queryParser, Presearcher presearcher,
+                   Directory directory, QueryDecomposer decomposer) throws IOException {
+
         this.queryParser = queryParser;
         this.presearcher = presearcher;
         this.directory = directory;
@@ -104,9 +107,10 @@ public class Monitor implements Closeable {
 
         this.manager = new SearcherManager(writer, true, new SearcherFactory());
 
-        this.purgeExecutor = Executors.newSingleThreadScheduledExecutor();
+        loadCache();
 
         long purgeFrequency = configurePurgeFrequency();
+        this.purgeExecutor = Executors.newSingleThreadScheduledExecutor();
         this.purgeExecutor.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -132,7 +136,12 @@ public class Monitor implements Closeable {
         this(queryParser, presearcher, directory, new QueryDecomposer());
     }
 
-
+    /**
+     * Create a new Monitor instance, using a RAMDirectory and the default QueryDecomposer
+     * @param queryParser the query parser to use
+     * @param presearcher the presearcher to use
+     * @throws IOException
+     */
     public Monitor(MonitorQueryParser queryParser, Presearcher presearcher) throws IOException {
         this(queryParser, presearcher, new RAMDirectory(), new QueryDecomposer());
     }
@@ -162,20 +171,39 @@ public class Monitor implements Closeable {
         }
     }
 
-    public static class CacheEntry {
+    protected static class CacheEntry {
 
-        public final MonitorQuery mq;
         public final Query matchQuery;
         public final Query highlightQuery;
         public final BytesRef hash;
 
-        public CacheEntry(MonitorQuery mq, BytesRef hash, Query matchQuery, Query highlightQuery) {
-            this.mq = mq;
+        public CacheEntry(BytesRef hash, Query matchQuery, Query highlightQuery) {
             this.hash = hash;
             this.matchQuery = matchQuery;
             this.highlightQuery = highlightQuery;
         }
     }
+
+    private void loadCache() throws IOException {
+        final List<Exception> parseErrors = new LinkedList<>();
+
+        match(new MatchAllDocsQuery(), new MonitorQueryCollector() {
+            @Override
+            public void doMatch(int doc, String queryId, BytesRef hash) {
+                mqDV.get(doc, serializedMQ);
+                MonitorQuery mq = MonitorQuery.deserialize(serializedMQ);
+                try {
+                    for (CacheEntry ce : decomposeQuery(mq)) {
+                        queries.put(ce.hash, ce);
+                    }
+                } catch (Exception e) {
+                    parseErrors.add(e);
+                }
+            }
+        });
+
+        if (parseErrors.size() != 0)
+            throw new IOException("Error populating cache - some queries couldn't be parsed:" + parseErrors);}
 
     /**
      * @return Statistics for the internal query index and cache
@@ -242,9 +270,9 @@ public class Monitor implements Closeable {
             purgeLock.writeLock().unlock();
         }
 
-        match(new MatchAllDocsQuery(), new SearchingCollector() {
+        match(new MatchAllDocsQuery(), new MonitorQueryCollector() {
             @Override
-            protected void doSearch(String id, BytesRef hash) {
+            protected void doMatch(int doc, String id, BytesRef hash) {
                 newCache.put(hash.clone(), queries.get(hash));
             }
         });
@@ -273,12 +301,13 @@ public class Monitor implements Closeable {
         if (System.getProperty(INFOSTREAM_FILE_PROPERTY) != null
                 && !System.getProperty(INFOSTREAM_FILE_PROPERTY).isEmpty()) {
             try {
-                PrintStream printStream = new PrintStream(System.getProperty(INFOSTREAM_FILE_PROPERTY));
+                PrintStream printStream = new PrintStream(System.getProperty(INFOSTREAM_FILE_PROPERTY), "UTF-8");
                 iwc.setInfoStream(new PrintStreamInfoStream(printStream));
-            } catch (FileNotFoundException ex) {
+            } catch (UnsupportedEncodingException | FileNotFoundException ex) {
                 throw new RuntimeException("Cannot create infostream file", ex);
             }
         }
+        iwc.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND);
         return iwc;
     }
 
@@ -301,7 +330,7 @@ public class Monitor implements Closeable {
      *
      * @param limit the limit in nanoseconds
      *
-     * @see CandidateMatcher#getSlowLog()
+     * @see Matches#getSlowLog()
      */
     protected void setSlowLogLimit(long limit) {
         this.slowLogLimit = limit;
@@ -316,31 +345,80 @@ public class Monitor implements Closeable {
     /**
      * Add new queries to the monitor
      * @param queries the MonitorQueries to add
+     * @param reporter an UpdateReporter to keep track of progress
      * @return a list of exceptions for queries that could not be added
      * @throws IOException
      */
-    public List<QueryError> update(Iterable<MonitorQuery> queries) throws IOException {
+    public List<QueryError> update(Iterable<MonitorQuery> queries, UpdateReporter reporter) throws IOException {
 
         List<QueryError> errors = new ArrayList<>();
         List<CacheEntry> updates = new ArrayList<>();
 
+        int count = 0;
         for (MonitorQuery query : queries) {
+            count++;
             try {
                 writer.deleteDocuments(new Term(FIELDS.del, query.getId()));
                 for (CacheEntry cacheEntry : decomposeQuery(query)) {
                     updates.add(cacheEntry);
-                    writer.addDocument(buildIndexableQuery(query.getId(), cacheEntry));
+                    writer.addDocument(buildIndexableQuery(query.getId(), query, cacheEntry));
                 }
             } catch (Exception e) {
                 errors.add(new QueryError(query.getId(), query.getQuery(), e.getMessage()));
             }
+            if (updates.size() > commitBatchSize) {
+                commit(updates);
+                reporter.progress(count, updates.size());
+                updates.clear();
+            }
         }
 
         commit(updates);
+        reporter.finish(count, updates.size());
         return errors;
     }
 
-    protected Iterable<CacheEntry> decomposeQuery(MonitorQuery query) throws Exception {
+    /**
+     * Add new queries to the monitor
+     * @param queries the MonitorQueries to add
+     * @return a list of exceptions for queries that could not be added
+     * @throws IOException
+     */
+    public List<QueryError> update(Iterable<MonitorQuery> queries) throws IOException {
+        return update(queries, new UpdateReporter() {
+            @Override
+            public void progress(int total, int batchsize) {
+
+            }
+
+            @Override
+            public void finish(int total, int finalbatchsize) {
+
+            }
+        });
+    }
+
+    /**
+     * Interface for callback reporters that keep track of the progress of an update
+     */
+    public static interface UpdateReporter {
+
+        /**
+         * Called when a batch has been added
+         * @param total the total number of queries added so far
+         * @param batchsize the number of queries in this batch (including disjuncts)
+         */
+        void progress(int total, int batchsize);
+
+        /**
+         * Called when the final batch has been added
+         * @param total the total number of queries added
+         * @param finalbatchsize the size of the final batch (including disjuncts)
+         */
+        void finish(int total, int finalbatchsize);
+    }
+
+    private Iterable<CacheEntry> decomposeQuery(MonitorQuery query) throws Exception {
 
         Query q = queryParser.parse(query.getQuery(), query.getMetadata());
         Query hq = Strings.isNullOrEmpty(query.getHighlightQuery())
@@ -353,7 +431,7 @@ public class Monitor implements Closeable {
         for (Query subquery : decomposer.decompose(q)) {
             BytesRef subHash = BytesRef.deepCopyOf(rootHash);
             subHash.append(new BytesRef("_" + upto++));
-            cacheEntries.add(new CacheEntry(query, subHash, subquery, hq));
+            cacheEntries.add(new CacheEntry(subHash, subquery, hq));
         }
 
         return cacheEntries;
@@ -411,18 +489,6 @@ public class Monitor implements Closeable {
         commit(null);
     }
 
-    private void match(CandidateMatcher matcher) throws IOException {
-
-        long buildTime = System.nanoTime();
-        Query query = buildQuery(matcher.getDocument());
-        buildTime = (System.nanoTime() - buildTime) / 1000000;
-
-        MatchingCollector collector = new MatchingCollector(matcher);
-        match(query, collector);
-        matcher.finish(buildTime, collector.getQueryCount());
-
-    }
-
     @VisibleForTesting
     Query buildQuery(InputDocument doc) throws IOException {
         try (TermsEnumFilter filter = new TermsEnumFilter(writer)) {
@@ -439,53 +505,27 @@ public class Monitor implements Closeable {
      * @return a {@link CandidateMatcher} summarizing the match run.
      * @throws IOException
      */
-    public <T extends CandidateMatcher> T match(InputDocument doc, MatcherFactory<T> factory) throws IOException {
-        T matcher = factory.createMatcher(doc);
+    public <T extends QueryMatch> Matches<T> match(InputDocument doc, MatcherFactory<T> factory) throws IOException {
+        CandidateMatcher<T> matcher = factory.createMatcher(doc);
         matcher.setSlowLogLimit(slowLogLimit);
         match(matcher);
-        return matcher;
+        return matcher.getMatches();
     }
 
-    /**
-     * Convert the supplied document to a query using the presearcher, and run it over the query
-     * index, passing each query to the supplied Collector.
-     * @param doc an InputDocument to match against the index
-     * @param collector the Collector to call for each match
-     * @throws IOException
-     */
-    public void match(InputDocument doc, MonitorQueryCollector collector) throws IOException {
+    private void match(InputDocument doc, MonitorQueryCollector collector) throws IOException {
         match(buildQuery(doc), collector);
     }
 
-    /**
-     * Get the MonitorQuery for a given query id
-     * @param queryId the id of the query to get
-     * @return the MonitorQuery stored for this id, or null if not found
-     * @throws IOException
-     */
-    public MonitorQuery getQuery(String queryId) throws IOException {
-        final MonitorQuery[] queryHolder = new MonitorQuery[]{ null };
-        match(new TermQuery(new Term(FIELDS.id, queryId)), new SearchingCollector() {
-            @Override
-            protected void doSearch(String id, BytesRef hash) {
-                queryHolder[0] = queries.get(hash).mq;
-            }
-        });
-        return queryHolder[0];
-    }
+    private <T extends QueryMatch> void match(CandidateMatcher<T> matcher) throws IOException {
 
-    /**
-     * @return the number of queries stored in this Monitor
-     */
-    public int getQueryCount() {
-        return writer.numDocs();
-    }
+        long buildTime = System.nanoTime();
+        Query query = buildQuery(matcher.getDocument());
+        buildTime = (System.nanoTime() - buildTime) / 1000000;
 
-    public <T extends QueryMatch> PresearcherMatches<T> debug(InputDocument doc,
-                                                              MatcherFactory<? extends CandidateMatcher<T>> factory) throws IOException {
-        PresearcherMatchCollector collector = new PresearcherMatchCollector(factory.createMatcher(doc));
-        match(doc, collector);
-        return collector.getMatches();
+        MatchingCollector<T> collector = new MatchingCollector<>(matcher);
+        match(query, collector);
+        matcher.finish(buildTime, collector.getQueryCount());
+
     }
 
     private void match(Query query, MonitorQueryCollector collector) throws IOException {
@@ -501,30 +541,86 @@ public class Monitor implements Closeable {
         }
     }
 
+    /**
+     * Get the MonitorQuery for a given query id
+     * @param queryId the id of the query to get
+     * @return the MonitorQuery stored for this id, or null if not found
+     * @throws IOException
+     */
+    public MonitorQuery getQuery(String queryId) throws IOException {
+        final MonitorQuery[] queryHolder = new MonitorQuery[]{ null };
+        match(new TermQuery(new Term(FIELDS.id, queryId)), new MonitorQueryCollector() {
+            @Override
+            public void doMatch(int doc, String queryId, BytesRef hash) {
+                mqDV.get(doc, serializedMQ);
+                queryHolder[0] = MonitorQuery.deserialize(serializedMQ);
+            }
+        });
+        return queryHolder[0];
+    }
+
+    /**
+     * @return the number of queries (after decomposition) stored in this Monitor
+     */
+    public int getDisjunctCount() {
+        return writer.numDocs();
+    }
+
+    /**
+     * @return the number of queries stored in this Monitor
+     */
+    public int getQueryCount() throws IOException {
+        final Set<String> ids = new HashSet<>();
+        match(new MatchAllDocsQuery(), new MonitorQueryCollector() {
+            @Override
+            public void doMatch(int doc, String queryId, BytesRef hash) {
+                ids.add(queryId);
+            }
+        });
+        return ids.size();
+    }
+
+    /**
+     * Match an InputDocument against the queries stored in the Monitor, also returning information
+     * about which queries were selected by the presearcher, and why.
+     * @param doc an InputDocument to match against the index
+     * @param factory a {@link MatcherFactory} to use to create a {@link CandidateMatcher} for the match run
+     * @param <T> the type of QueryMatch produced by the CandidateMatcher
+     * @return a PresearcherMatches object
+     * @throws IOException
+     */
+    public <T extends QueryMatch> PresearcherMatches<T>
+            debug(InputDocument doc, MatcherFactory<T> factory) throws IOException {
+        PresearcherMatchCollector<T> collector = new PresearcherMatchCollector<>(factory.createMatcher(doc));
+        match(doc, collector);
+        return collector.getMatches();
+    }
+
     public void setCommitTimeout(long milis) {
         this.commitTimeout = milis;
     }
 
-    protected Document buildIndexableQuery(String id, CacheEntry query) {
-        Document doc = presearcher.indexQuery(query.matchQuery, query.mq.getMetadata());
-        doc.add(new StringField(Monitor.FIELDS.id, id, Field.Store.NO));
-        doc.add(new StringField(Monitor.FIELDS.del, id, Field.Store.NO));
-        doc.add(new BinaryDocValuesField(Monitor.FIELDS.id, new BytesRef(id)));
-        doc.add(new BinaryDocValuesField(Monitor.FIELDS.hash, query.hash));
+    protected Document buildIndexableQuery(String id, MonitorQuery mq, CacheEntry query) {
+        Document doc = presearcher.indexQuery(query.matchQuery, mq.getMetadata());
+        doc.add(new StringField(FIELDS.id, id, Field.Store.NO));
+        doc.add(new StringField(FIELDS.del, id, Field.Store.NO));
+        doc.add(new SortedDocValuesField(FIELDS.id, new BytesRef(id)));
+        doc.add(new BinaryDocValuesField(FIELDS.hash, query.hash));
+        doc.add(new BinaryDocValuesField(FIELDS.mq, MonitorQuery.serialize(mq)));
         return doc;
     }
 
     // For each query selected by the presearcher, pass on to a CandidateMatcher
-    private static class MatchingCollector extends SearchingCollector {
+    private static class MatchingCollector<T extends QueryMatch> extends MonitorQueryCollector {
 
-        final CandidateMatcher matcher;
+        final CandidateMatcher<T> matcher;
 
-        private MatchingCollector(CandidateMatcher matcher) {
+        private MatchingCollector(CandidateMatcher<T> matcher) {
             this.matcher = matcher;
         }
 
         @Override
-        protected void doSearch(String queryId, BytesRef hash) {
+        protected void doMatch(int doc, String queryId, BytesRef hash) throws IOException {
             try {
                 CacheEntry entry = queries.get(hash);
                 matcher.matchQuery(queryId, entry.matchQuery, entry.highlightQuery);
@@ -536,34 +632,17 @@ public class Monitor implements Closeable {
 
     }
 
-    public static abstract class SearchingCollector extends MonitorQueryCollector {
-
-        /**
-         * Do something with the matching query
-         * @param id the queryId
-         * @param hash the hash value to use to look up the query in QueryCache
-         */
-        protected abstract void doSearch(String id, BytesRef hash);
-
-        @Override
-        public final void collect(int doc) throws IOException {
-            hashDV.get(doc, hash);
-            idDV.get(doc, id);
-            queryCount++;
-            doSearch(id.utf8ToString(), hash);
-        }
-
-    }
-
     /**
      * A Collector that decodes the stored query for each document hit.
      */
     public static abstract class MonitorQueryCollector extends Collector {
 
         protected BinaryDocValues hashDV;
-        protected BinaryDocValues idDV;
+        protected SortedDocValues idDV;
+        protected BinaryDocValues mqDV;
         protected AtomicReader reader;
 
+        final BytesRef serializedMQ = new BytesRef();
         final BytesRef hash = new BytesRef();
         final BytesRef id = new BytesRef();
 
@@ -581,10 +660,21 @@ public class Monitor implements Closeable {
         }
 
         @Override
-        public final void setNextReader(AtomicReaderContext context) throws IOException {
+        public void collect(int doc) throws IOException {
+            hashDV.get(doc, hash);
+            idDV.get(doc, id);
+            queryCount++;
+            doMatch(doc, id.utf8ToString(), hash);
+        }
+
+        protected abstract void doMatch(int doc, String queryId, BytesRef queryHash) throws IOException;
+
+        @Override
+        public void setNextReader(AtomicReaderContext context) throws IOException {
             this.reader = context.reader();
             this.hashDV = context.reader().getBinaryDocValues(Monitor.FIELDS.hash);
-            this.idDV = context.reader().getBinaryDocValues(FIELDS.id);
+            this.idDV = context.reader().getSortedDocValues(FIELDS.id);
+            this.mqDV = context.reader().getBinaryDocValues(FIELDS.mq);
         }
 
         @Override
@@ -600,8 +690,8 @@ public class Monitor implements Closeable {
 
     }
 
-    public static class PresearcherMatchCollector<T extends QueryMatch>
-            extends MonitorQueryCollector implements IntervalCollector {
+    private static class PresearcherMatchCollector<T extends QueryMatch>
+            extends MatchingCollector<T> implements IntervalCollector {
 
         private IntervalIterator positions;
         private Document document;
@@ -609,39 +699,25 @@ public class Monitor implements Closeable {
 
         public final Map<String, StringBuilder> matchingTerms = new HashMap<>();
 
-        private final BytesRef scratch = new BytesRef();
-
-        final CandidateMatcher<T> matcher;
-
         private PresearcherMatchCollector(CandidateMatcher<T> matcher) {
-            this.matcher = matcher;
+            super(matcher);
         }
 
         public PresearcherMatches<T> getMatches() {
-            return new PresearcherMatches<>(matchingTerms, matcher);
+            return new PresearcherMatches<>(matchingTerms, matcher.getMatches());
         }
 
         @Override
-        public void collect(int doc) throws IOException {
+        protected void doMatch(int doc, String queryId, BytesRef hash) throws IOException {
 
-            idDV.get(doc, scratch);
-            this.currentId = scratch.utf8ToString();
-
+            currentId = queryId;
             document = reader.document(doc);
             positions.scorerAdvanced(doc);
-            while(positions.next() != null) {
+            while (positions.next() != null) {
                 positions.collect(this);
             }
 
-            hashDV.get(doc, hash);
-            queryCount++;
-            try {
-                CacheEntry entry = queries.get(hash);
-                matcher.matchQuery(currentId, entry.matchQuery, entry.highlightQuery);
-            }
-            catch (Exception e) {
-                matcher.reportError(new MatchError(currentId, e));
-            }
+            super.doMatch(doc, queryId, hash);
         }
 
         @Override
@@ -654,6 +730,7 @@ public class Monitor implements Closeable {
             return Weight.PostingFeatures.OFFSETS;
         }
 
+        @Override
         public boolean acceptsDocsOutOfOrder() {
             return false;
         }
@@ -676,4 +753,26 @@ public class Monitor implements Closeable {
         }
 
     }
+
+    /**
+     * @return the MonitorQueryParser used by this Monitor
+     */
+    public MonitorQueryParser getQueryParser() {
+        return queryParser;
+    }
+
+    /**
+     * @return the Presearcher used by this Monitor
+     */
+    public Presearcher getPresearcher() {
+        return presearcher;
+    }
+
+    /**
+     * @return the QueryDecomposer used by this Monitor
+     */
+    public QueryDecomposer getQueryDecomposer() {
+        return decomposer;
+    }
+
 }

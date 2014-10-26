@@ -1,5 +1,6 @@
 package uk.co.flax.luwak;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
@@ -28,26 +29,53 @@ import org.apache.lucene.search.Query;
 public class QueryDecomposer {
 
     public Collection<Query> decompose(Query q) {
-        if (!canBeDecomposed(q))
-            return ImmutableList.of(q);
 
-        List<Query> subqueries = new LinkedList<>();
-        for (BooleanClause clause : (BooleanQuery) q) {
-            subqueries.addAll(decompose(clause.getQuery()));
-        }
-        return subqueries;
+        if (q instanceof BooleanQuery)
+            return decomposeBoolean((BooleanQuery) q);
+
+        return ImmutableList.of(q);
     }
 
-    public static boolean canBeDecomposed(Query query) {
-        if (!(query instanceof BooleanQuery))
-            return false;
-        BooleanQuery bq = (BooleanQuery) query;
-        if (bq.getMinimumNumberShouldMatch() > 1)
-            return false;
-        for (BooleanClause clause : bq) {
-            if (clause.getOccur() != BooleanClause.Occur.SHOULD)
-                return false;
+    public Collection<Query> decomposeBoolean(BooleanQuery q) {
+        if (q.getMinimumNumberShouldMatch() > 1)
+            return ImmutableList.<Query>of(q);
+
+        List<Query> subqueries = new LinkedList<>();
+        List<Query> exclusions = new LinkedList<>();
+        List<Query> mandatory = new LinkedList<>();
+
+        for (BooleanClause clause : q) {
+            if (clause.getOccur() == BooleanClause.Occur.MUST)
+                mandatory.add(clause.getQuery());
+            else if (clause.getOccur() == BooleanClause.Occur.MUST_NOT)
+                exclusions.add(clause.getQuery());
+            else
+                subqueries.addAll(decompose(clause.getQuery()));
         }
-        return true;
+
+        // More than one MUST clause, or a single MUST clause with disjunctions
+        if (mandatory.size() > 1 || (mandatory.size() == 1 && subqueries.size() > 0))
+            return ImmutableList.<Query>of(q);
+
+        // If we only have a single MUST clause and no SHOULD clauses, then we can
+        // decompose the MUST clause instead
+        if (mandatory.size() == 1)
+            subqueries.addAll(decompose(mandatory.get(0)));
+
+        if (exclusions.size() == 0)
+            return subqueries;
+
+        // If there are exclusions, then we need to add them to all the decomposed
+        // queries
+        List<Query> rewrittenSubqueries = new ArrayList<>(subqueries.size());
+        for (Query subquery : subqueries) {
+            BooleanQuery bq = new BooleanQuery();
+            bq.add(subquery, BooleanClause.Occur.MUST);
+            for (Query ex : exclusions) {
+                bq.add(ex, BooleanClause.Occur.MUST_NOT);
+            }
+            rewrittenSubqueries.add(bq);
+        }
+        return rewrittenSubqueries;
     }
 }

@@ -16,7 +16,7 @@ import uk.co.flax.luwak.matchers.SimpleMatcher;
 import uk.co.flax.luwak.presearcher.MatchAllPresearcher;
 import uk.co.flax.luwak.queryparsers.LuceneQueryParser;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -75,7 +75,7 @@ public class TestMonitorErrorHandling {
         assertThat(errors).hasSize(1);
 
         InputDocument doc = InputDocument.builder("doc").addField(FIELD, "test", ANALYZER).build();
-        SimpleMatcher matcher = monitor.match(doc, SimpleMatcher.FACTORY);
+        Matches matcher = monitor.match(doc, SimpleMatcher.FACTORY);
 
         assertThat(matcher.getErrors()).hasSize(1);
         assertThat(matcher.getMatchCount()).isEqualTo(1);

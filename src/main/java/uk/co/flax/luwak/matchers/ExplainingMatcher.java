@@ -26,7 +26,7 @@ import uk.co.flax.luwak.MatcherFactory;
 
 public class ExplainingMatcher extends CandidateMatcher<ExplainingMatch> {
 
-    public static final MatcherFactory<ExplainingMatcher> FACTORY = new MatcherFactory<ExplainingMatcher>() {
+    public static final MatcherFactory<ExplainingMatch> FACTORY = new MatcherFactory<ExplainingMatch>() {
         @Override
         public ExplainingMatcher createMatcher(InputDocument doc) {
             return new ExplainingMatcher(doc);
@@ -43,5 +43,11 @@ public class ExplainingMatcher extends CandidateMatcher<ExplainingMatch> {
         if (!explanation.isMatch())
             return null;
         return new ExplainingMatch(queryId, explanation);
+    }
+
+    @Override
+    public ExplainingMatch resolve(ExplainingMatch match1, ExplainingMatch match2) {
+        return match1.getExplanation().getValue() > match2.getExplanation().getValue() ?
+                match1 : match2;
     }
 }

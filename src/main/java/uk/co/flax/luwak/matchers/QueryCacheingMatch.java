@@ -19,14 +19,12 @@ import uk.co.flax.luwak.QueryMatch;
  * limitations under the License.
  */
 
-public class QueryCacheingMatch<T extends QueryMatch> extends QueryMatch {
+public class QueryCacheingMatch<T extends QueryMatch> extends WrappedMatch<T> {
 
     public final Query query;
-    public final T wrappedMatch;
 
-    public QueryCacheingMatch(String queryId, Query query, T wrappedMatch) {
-        super(queryId);
+    public QueryCacheingMatch(Query query, T wrappedMatch) {
+        super(wrappedMatch);
         this.query = query;
-        this.wrappedMatch = wrappedMatch;
     }
 }

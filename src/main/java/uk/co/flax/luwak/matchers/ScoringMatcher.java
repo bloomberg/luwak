@@ -31,6 +31,7 @@ public class ScoringMatcher extends CollectingMatcher<ScoringMatch> {
         super(doc);
     }
 
+    @Override
     protected ScoringMatch doMatch(String queryId, Scorer scorer) throws IOException {
         float score = scorer.score();
         if (score > 0)
@@ -39,17 +40,14 @@ public class ScoringMatcher extends CollectingMatcher<ScoringMatch> {
     }
 
     @Override
-    protected void addMatch(String queryId, ScoringMatch match) {
-        ScoringMatch prev = this.matches(queryId);
-        if (prev == null || prev.getScore() < match.getScore()) {
-            super.addMatch(queryId, match);
-        }
+    public ScoringMatch resolve(ScoringMatch match1, ScoringMatch match2) {
+        return match1.getScore() < match2.getScore() ? match2 : match1;
     }
 
     /**
      * A MatcherFactory for ScoringMatcher objects
      */
-    public static final MatcherFactory<ScoringMatcher> FACTORY = new MatcherFactory<ScoringMatcher>() {
+    public static final MatcherFactory<ScoringMatch> FACTORY = new MatcherFactory<ScoringMatch>() {
         @Override
         public ScoringMatcher createMatcher(InputDocument doc) {
             return new ScoringMatcher(doc);

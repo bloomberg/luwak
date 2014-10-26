@@ -3,7 +3,7 @@ package uk.co.flax.luwak.presearcher;
 import java.util.Iterator;
 import java.util.Map;
 
-import uk.co.flax.luwak.CandidateMatcher;
+import uk.co.flax.luwak.Matches;
 import uk.co.flax.luwak.QueryMatch;
 
 /**
@@ -25,16 +25,16 @@ import uk.co.flax.luwak.QueryMatch;
 public class PresearcherMatches<T extends QueryMatch> implements Iterable<PresearcherMatch<T>> {
 
     private final Map<String, StringBuilder> matchingTerms;
-    private final CandidateMatcher<T> matcher;
+    public final Matches<T> matcher;
 
-    public PresearcherMatches(Map<String, StringBuilder> matchingTerms, CandidateMatcher<T> matcher) {
+    public PresearcherMatches(Map<String, StringBuilder> matchingTerms, Matches<T> matcher) {
         this.matcher = matcher;
         this.matchingTerms = matchingTerms;
     }
 
     public PresearcherMatch<T> match(String id) {
         if (matchingTerms.containsKey(id))
-            return new PresearcherMatch<>(matchingTerms.get(id).toString(), matcher.matches(id));
+            return new PresearcherMatch<>(id, matchingTerms.get(id).toString(), matcher.matches(id));
         return null;
     }
 
@@ -50,7 +50,7 @@ public class PresearcherMatches<T extends QueryMatch> implements Iterable<Presea
             @Override
             public PresearcherMatch<T> next() {
                 String id = ids.next();
-                return new PresearcherMatch<>(matchingTerms.get(id).toString(), matcher.matches(id));
+                return new PresearcherMatch<>(id, matchingTerms.get(id).toString(), matcher.matches(id));
             }
 
             @Override

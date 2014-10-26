@@ -8,11 +8,12 @@ import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.search.similarities.DefaultSimilarity;
 import org.apache.lucene.search.similarities.Similarity;
 import org.junit.Test;
+import uk.co.flax.luwak.matchers.ScoringMatch;
 import uk.co.flax.luwak.matchers.ScoringMatcher;
 import uk.co.flax.luwak.presearcher.MatchAllPresearcher;
 import uk.co.flax.luwak.queryparsers.LuceneQueryParser;
 
-import static org.fest.assertions.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Copyright (c) 2014 Lemur Consulting Ltd.
@@ -53,8 +54,8 @@ public class TestSimilarities {
                 .addField("field", "this is a test", ANALYZER)
                 .setSimilarity(similarity).build();
 
-        ScoringMatcher standard = monitor.match(doc, ScoringMatcher.FACTORY);
-        ScoringMatcher withSim = monitor.match(docWithSim, ScoringMatcher.FACTORY);
+        Matches<ScoringMatch> standard = monitor.match(doc, ScoringMatcher.FACTORY);
+        Matches<ScoringMatch> withSim = monitor.match(docWithSim, ScoringMatcher.FACTORY);
 
         assertThat(Iterables.getFirst(standard, null).getScore())
                 .isEqualTo(Iterables.getFirst(withSim, null).getScore() / 1000);
