@@ -40,6 +40,8 @@ public abstract class CandidateMatcher<T extends QueryMatch> {
 
     protected final StringBuilder slowlog = new StringBuilder();
 
+    private Matches<T> matchesResult;
+
     /**
      * Creates a new CandidateMatcher for the supplied InputDocument
      * @param doc the document to run queries against
@@ -113,6 +115,10 @@ public abstract class CandidateMatcher<T extends QueryMatch> {
     }
 
     public Matches<T> getMatches() {
-        return new Matches<>(doc.getId(), matches, errors, queryBuildTime, searchTime, queriesRun, slowlog.toString());
+        if (matchesResult == null) {
+            matchesResult = new Matches<>(doc.getId(), matches, errors, queryBuildTime, searchTime,
+                    queriesRun, slowlog.toString());
+        }
+        return matchesResult;
     }
 }
