@@ -30,6 +30,7 @@ public class Matches<T extends QueryMatch> implements Iterable<T> {
 
     private final long queryBuildTime;
     private final long searchTime;
+    private long matchTime;
     private final int queriesRun;
 
     protected final String slowlog;
@@ -112,4 +113,11 @@ public class Matches<T extends QueryMatch> implements Iterable<T> {
         return slowlog;
     }
 
+    public long getMatchTime() {
+        return matchTime;
+    }
+
+    public void setMatchTime(long matchTime) {
+        this.matchTime = matchTime;
+    }
 }
