@@ -1,6 +1,8 @@
 package uk.co.flax.luwak.presearcher;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -109,6 +111,7 @@ public class MultipassTermFilteredPresearcher extends TermFilteredPresearcher {
     private class MultipassDocumentQueryBuilder implements DocumentQueryBuilder {
 
         BooleanQuery[] queries = new BooleanQuery[passes];
+        Set<String> terms = new HashSet<>();
 
         public MultipassDocumentQueryBuilder() {
             for (int i = 0; i < queries.length; i++) {
@@ -118,8 +121,11 @@ public class MultipassTermFilteredPresearcher extends TermFilteredPresearcher {
 
         @Override
         public void addTerm(String field, String term) {
-            for (int i = 0; i < passes; i++) {
-                queries[i].add(new TermQuery(new Term(field(field, i), term)), BooleanClause.Occur.SHOULD);
+            if (!terms.contains(term)) {
+                for (int i = 0; i < passes; i++) {
+                        queries[i].add(new TermQuery(new Term(field(field, i), term)), BooleanClause.Occur.SHOULD);
+                }
+                terms.add(term);
             }
         }
 

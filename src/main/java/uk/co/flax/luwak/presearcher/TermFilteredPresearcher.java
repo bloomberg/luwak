@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.Lists;
+import java.util.HashSet;
+import java.util.Set;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Document;
@@ -115,12 +117,15 @@ public class TermFilteredPresearcher extends Presearcher {
 
     protected DocumentQueryBuilder getQueryBuilder() {
         return new DocumentQueryBuilder() {
-
+            Set<String> terms = new HashSet<>();
             BooleanQuery bq = new BooleanQuery();
 
             @Override
             public void addTerm(String field, String term) {
-                bq.add(new TermQuery(new Term(field, term)), BooleanClause.Occur.SHOULD);
+                if (!terms.contains(term)) {
+                    bq.add(new TermQuery(new Term(field, term)), BooleanClause.Occur.SHOULD);
+                    terms.add(term);
+                }
             }
 
             @Override
