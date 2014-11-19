@@ -623,7 +623,9 @@ public class Monitor implements Closeable {
         protected void doMatch(int doc, String queryId, BytesRef hash) throws IOException {
             try {
                 CacheEntry entry = queries.get(hash);
-                matcher.matchQuery(queryId, entry.matchQuery, entry.highlightQuery);
+                if (entry != null) {
+                    matcher.matchQuery(queryId, entry.matchQuery, entry.highlightQuery);
+                }
             }
             catch (Exception e) {
                 matcher.reportError(new MatchError(queryId, e));
