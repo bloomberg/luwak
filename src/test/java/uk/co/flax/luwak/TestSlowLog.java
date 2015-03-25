@@ -91,7 +91,7 @@ public class TestSlowLog {
     @Test
     public void testParallelSlowLog() throws IOException {
 
-        ExecutorService executor = Executors.newCachedThreadPool();
+        ExecutorService executor = Executors.newFixedThreadPool(3);
 
         Monitor monitor = new Monitor(new SlowQueryParser(250), new MatchAllPresearcher());
         monitor.update(new MonitorQuery("1", "slow"), new MonitorQuery("2", "fast"), new MonitorQuery("3", "slow"));
