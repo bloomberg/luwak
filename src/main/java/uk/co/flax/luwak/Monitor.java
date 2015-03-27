@@ -12,9 +12,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+
 import java.io.FileNotFoundException;
 import java.io.UnsupportedEncodingException;
 import java.io.PrintStream;
+
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.*;
@@ -27,6 +29,7 @@ import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.PrintStreamInfoStream;
+
 import uk.co.flax.luwak.presearcher.PresearcherMatches;
 import uk.co.flax.luwak.presearcher.TermsEnumFilter;
 
@@ -158,7 +161,7 @@ public class Monitor implements Closeable {
         /** Total number of queries in the query index */
         public final int queries;
 
-        /** Total number of queries int the query cache */
+        /** Total number of queries in the query cache */
         public final int cachedQueries;
 
         /** Time the query cache was last purged */
@@ -168,6 +171,31 @@ public class Monitor implements Closeable {
             this.queries = queries;
             this.cachedQueries = cachedQueries;
             this.lastPurged = lastPurged;
+        }
+    }
+
+    /**
+     * Statistics for the query index
+     */
+    public static class IndexStats {
+
+        /** Number of documents in RAM waiting to be committed */
+        public final int ramDocs;
+
+        /** Total number of bytes used in memory */
+        public final long ramBytes;
+
+        /** Segment info as a string */
+        public final String segmentString;
+
+        /** Directory of the index (for caller to calculate size) */
+        public final Directory indexDirectory;
+
+        public IndexStats(int ramDocs, long ramBytes, String segmentString, Directory indexDirectory) {
+            this.ramDocs = ramDocs;
+            this.ramBytes = ramBytes;
+            this.segmentString = segmentString;
+            this.indexDirectory = indexDirectory;
         }
     }
 
@@ -210,6 +238,10 @@ public class Monitor implements Closeable {
      */
     public CacheStats getStats() {
         return new CacheStats(this.writer.numDocs(), this.queries.size(), lastPurged);
+    }
+
+    public IndexStats getIndexStats() {
+        return new IndexStats(this.writer.numRamDocs(), this.writer.ramSizeInBytes(), this.writer.segString(), this.writer.getDirectory());
     }
 
     private void commit(List<CacheEntry> updates) throws IOException {
@@ -297,11 +329,12 @@ public class Monitor implements Closeable {
     protected IndexWriterConfig configureIndexWriterConfig(IndexWriterConfig iwc) {
         TieredMergePolicy mergePolicy = new TieredMergePolicy();
         mergePolicy.setSegmentsPerTier(4);
+        mergePolicy.setMaxMergeAtOnce(30);
         iwc.setMergePolicy(mergePolicy);
-        if (System.getProperty(INFOSTREAM_FILE_PROPERTY) != null
-                && !System.getProperty(INFOSTREAM_FILE_PROPERTY).isEmpty()) {
+        String infostreamFile = System.getProperty(INFOSTREAM_FILE_PROPERTY);
+        if (infostreamFile != null && !infostreamFile.isEmpty()) {
             try {
-                PrintStream printStream = new PrintStream(System.getProperty(INFOSTREAM_FILE_PROPERTY), "UTF-8");
+                PrintStream printStream = new PrintStream(infostreamFile, "UTF-8");
                 iwc.setInfoStream(new PrintStreamInfoStream(printStream));
             } catch (UnsupportedEncodingException | FileNotFoundException ex) {
                 throw new RuntimeException("Cannot create infostream file", ex);
@@ -332,7 +365,7 @@ public class Monitor implements Closeable {
      *
      * @see Matches#getSlowLog()
      */
-    protected void setSlowLogLimit(long limit) {
+    public void setSlowLogLimit(long limit) {
         this.slowLogLimit = limit;
     }
 
