@@ -614,6 +614,20 @@ public class Monitor implements Closeable {
     }
 
     /**
+     * @return the set of query ids of the queries stored in this Monitor
+     */
+    public Set<String> getQueryIds() throws IOException {
+        final Set<String> ids = new HashSet<>();
+        match(new MatchAllDocsQuery(), new MonitorQueryCollector() {
+            @Override
+            public void doMatch(int doc, String queryId, BytesRef hash) {
+                ids.add(queryId);
+            }
+        });
+        return ids;
+    }
+
+    /**
      * Match an InputDocument against the queries stored in the Monitor, also returning information
      * about which queries were selected by the presearcher, and why.
      * @param doc an InputDocument to match against the index
